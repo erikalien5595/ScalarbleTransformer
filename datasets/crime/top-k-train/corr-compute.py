@@ -20,7 +20,6 @@ def create_ei(i):
 
     # initiate DeepGraph
     g = dg.DeepGraph(v)
-
     # create edges
     g.create_edges(connectors=corr, step_size=step_size,
                    from_pos=from_pos, to_pos=to_pos)
@@ -31,14 +30,14 @@ def create_ei(i):
 # computation
 if __name__ == '__main__':
     root_path = './datasets/'
-    df_dataset = 'crime.csv'
-    data='crime'
+    df_dataset = 'traffic.csv'
+    data='traffic'
 
-    df = pd.read_csv(root_path+df_dataset, header = None)
-    df.columns = df.iloc[0,:]
-    df = df.iloc[1:,:]
-    df['Date'] = pd.to_datetime(df['Date'])
-    df.set_index('Date', inplace=True, drop=True)
+    df = pd.read_csv(root_path+df_dataset)
+    # df.columns = df.iloc[0,:]
+    # df = df.iloc[1:,:]
+    df['date'] = pd.to_datetime(df['date'])
+    df.set_index('date', inplace=True, drop=True)
 
     num_train = int(len(df) * 0.7)
     num_test = int(len(df) * 0.2)
@@ -50,19 +49,20 @@ if __name__ == '__main__':
     df_x = df_x.T
     df_x = (df_x - df_x.mean(axis=1, keepdims=True)) / df_x.std(axis=1, keepdims=True)
     np.save(f'samples_train_{data}', df_x)
+    print(np.corrcoef(df_x))
 
-    n_features_ = int(1155)
-    n_samples_ = int(182)
+    n_features_ = int(862)
+    n_samples_ = num_train
     step_size = 1e6
     n_processes = 1000
     # load samples as memory-map
     df_x = np.load(f'samples_train_{data}.npy', mmap_mode='r')
     # create node table that stores references to the mem-mapped samples
     v = pd.DataFrame({'index': range(df_x.shape[0])})
+    print(v)
     # index array for parallelization
     pos_array = np.array(np.linspace(0, n_features_*(n_features_-1)//2, n_processes), dtype=int)
 
-    
     # computation
     os.makedirs(f'tmp/correlations-train-{data}', exist_ok=True)
     indices = np.arange(0, n_processes - 1)
@@ -82,7 +82,9 @@ if __name__ == '__main__':
     
     # transfer correlation table --> matrix
     e = pd.read_hdf(f'e-train-{data}.h5')
-    max_index = max(e.index.get_level_values(1)) + 1
+    print(e)
+    max_index = max(e.index.get_level_values(1)) + 1 # 获取e这个DataFrame对象的多重索引中第二个级别的值中的最大值
+    print(max_index)
     matrix = np.full((max_index, max_index), np.nan)
     for (s, t), value in e.iterrows():
         matrix[s, t] = value
@@ -90,17 +92,23 @@ if __name__ == '__main__':
         
     # get the sorted indices, fill nan with 0
     matrix = np.nan_to_num(matrix)
+    print(matrix)
     # for each row of matrix, rank the index according to the value (descending), 
     matrix_rank = np.fliplr(matrix.argsort(axis=1))
     tr = matrix_rank
+    print(tr)
     # for each row of tr, remove the value that the same as the index
     results=[]
-    for i in range(1155):
+    for i in range(n_features_):
         tmp = []
-        for j in range(1155):
+        for j in range(n_features_):
             if tr[i][j] != i:
                 tmp.append(tr[i][j])
         results.append(tmp)
-        
     result_arr = np.array(results)
+    print(result_arr)
+    adj_k = result_arr[:, :5]
+    for i, trtt in enumerate(adj_k):
+        print(i,trtt)
     np.save(f'matrix_rank_train_{data}1', result_arr)
+    print('finished!')
